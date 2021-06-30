@@ -102,18 +102,18 @@ def unique_label() -> Text:
 SelfReduxError = collections.namedtuple('SelfReduxError', 'source message entry')
 
 
-def book(entries, options_map, methods):
+def book(entries, options_map, methods, initial_balances=None):
     """Interpolate missing data from the entries using the full historical algorithm.
     See the internal implementation _book() for details.
     This method only stripes some of the return values.
 
     See _book() for arguments and return values.
     """
-    entries, errors, _ = _book(entries, options_map, methods)
+    entries, errors, _ = _book(entries, options_map, methods, initial_balances)
     return entries, errors
 
 
-def _book(entries, options_map, methods):
+def _book(entries, options_map, methods, initial_balances=None):
     """Interpolate missing data from the entries using the full historical algorithm.
 
     Args:
@@ -122,6 +122,8 @@ def _book(entries, options_map, methods):
       options_map: An options dict as produced by the parser.
       methods: A mapping of account name to their corresponding booking
         method.
+      initial_balances: A dict of (account, inventory) pairs to start booking from.
+        This is useful when attempting to book on top of an existing state.
     Returns:
       A triple of
         entries: A list of interpolated entries with all their postings completed.
@@ -130,7 +132,16 @@ def _book(entries, options_map, methods):
     """
     new_entries = []
     errors = []
-    balances = collections.defaultdict(inventory.Inventory)
+
+    # Set initial state to start booking from.
+    #
+    # TODO(blais): In v3 we want to explode this to that this is a common
+    # operation and also abstract the initial balances to a Realization object.
+    balances = (collections.defaultdict(inventory.Inventory)
+                if initial_balances is None
+                else initial_balances)
+    assert isinstance(balances, (dict, collections.defaultdict))
+
     for entry in entries:
         if isinstance(entry, Transaction):
             # Group postings by currency.
@@ -604,6 +615,9 @@ def book_reductions(entry, group_postings, balances,
                                        entry))
                     return [], errors  # This is irreconcilable, remove these postings.
 
+                # TODO(blais): We'll have to change this, as we want to allow
+                # positions crossing from negative to positive and vice-versa in
+                # a simple application. See {d3cbd78f1029}.
                 reduction_postings, matched_postings, ambi_errors = (
                     booking_method.handle_ambiguous_matches(entry, posting, matches,
                                                             method))
@@ -731,7 +745,7 @@ def interpolate_group(postings, balances, currency, tolerances):
       tolerances: A dict of currency to tolerance values.
     Returns:
       A tuple of
-        postings: A lit of new posting instances.
+        postings: A list of new posting instances.
         errors: A list of errors generated during interpolation.
         interpolated: A boolean, true if we did have to interpolate.
 
@@ -770,7 +784,8 @@ def interpolate_group(postings, balances, currency, tolerances):
             # to be interpolated.
             if cost is not None:
                 assert isinstance(cost.number, Decimal), (
-                    "Internal error: cost has no number: {}".format(cost))
+                    "Internal error: cost has no number: {}; on postings: {}".format(
+                        cost, postings))
 
         if price and price.number is MISSING:
             incomplete.append((MissingType.PRICE, index))
@@ -935,7 +950,7 @@ def interpolate_group(postings, balances, currency, tolerances):
             errors.append(InterpolationError(
                 posting.meta,
                 'Amount is zero: "{}"'.format(posting.units), None))
-        if posting.cost.number < ZERO:
+        if posting.cost.number is not None and posting.cost.number < ZERO:
             errors.append(InterpolationError(
                 posting.meta,
                 'Cost is negative: "{}"'.format(posting.cost), None))

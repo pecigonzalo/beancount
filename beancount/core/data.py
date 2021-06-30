@@ -40,6 +40,11 @@ class Booking(enum.Enum):
     # Reject ambiguous matches with an error.
     STRICT = 'STRICT'
 
+    # Strict booking method, but disambiguate further with sizes. Reject
+    # ambiguous matches with an error but if a lot matches the size exactly,
+    # accept it the oldest.
+    STRICT_WITH_SIZE = 'STRICT_WITH_SIZE'
+
     # Disable matching and accept the creation of mixed inventories.
     NONE = 'NONE'
 
@@ -87,7 +92,7 @@ class Open(NamedTuple):
     date: datetime.date
     account: Account
     currencies: List[Currency]
-    booking: Booking
+    booking: Optional[Booking]
 
 
 class Close(NamedTuple):
@@ -272,6 +277,8 @@ class Note(NamedTuple):
     date: datetime.date
     account: Account
     comment: str
+    tags: Optional[Set]
+    links: Optional[Set]
 
 
 class Event(NamedTuple):
@@ -396,10 +403,7 @@ class Custom(NamedTuple):
 
     Attributes:
       meta: See above.
-      date: The date at which this query should be run. All directives following
-        this date will be ignored automatically. This is essentially equivalent to
-        the CLOSE modifier in the shell syntax.
-      dir_type: A string that represents the type of the directive.
+      type: A string that represents the type of the directive.
       values: A list of values of various simple types supported by the grammar.
         (Note that this list is not enforced to be consistent for all directives
         of the same type by the parser.)

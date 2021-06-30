@@ -5,11 +5,13 @@ __license__ = "GNU GPLv2"
 
 import codecs
 import datetime
+import enum
 import io
 import re
 import sys
 import textwrap
 from decimal import Decimal
+from typing import Optional
 
 from beancount.core import position
 from beancount.core import convert
@@ -123,7 +125,7 @@ class EntryPrinter:
         method(obj, oss)
         return oss.getvalue()
 
-    META_IGNORE = set(['filename', 'lineno', '__automatic__'])
+    META_IGNORE = {'filename', 'lineno'}
 
     def write_metadata(self, meta, oss, prefix=None):
         """Write metadata to the file object, excluding filename and line number.
@@ -137,11 +139,11 @@ class EntryPrinter:
         if prefix is None:
             prefix = self.prefix
         for key, value in sorted(meta.items()):
-            if key not in self.META_IGNORE:
+            if key not in self.META_IGNORE and not key.startswith('__'):
                 value_str = None
                 if isinstance(value, str):
                     value_str = '"{}"'.format(misc_utils.escape_string(value))
-                elif isinstance(value, (Decimal, datetime.date, amount.Amount)):
+                elif isinstance(value, (Decimal, datetime.date, amount.Amount, enum.Enum)):
                     value_str = str(value)
                 elif isinstance(value, bool):
                     value_str = 'TRUE' if value else 'FALSE'
@@ -178,7 +180,8 @@ class EntryPrinter:
             for link in sorted(entry.links):
                 strings.append('^{}'.format(link))
 
-        oss.write('{e.date} {e.flag} {}\n'.format(' '.join(strings), e=entry))
+        oss.write('{e.date} {flag} {}\n'.format(' '.join(strings), e=entry,
+                                                flag=render_flag(entry.flag)))
         self.write_metadata(entry.meta, oss)
 
         rows = [self.render_posting_strings(posting)
@@ -197,25 +200,21 @@ class EntryPrinter:
                                if self.render_weight
                                else False)
         if non_trivial_balance:
-            fmt = "{0}{{:{1}}}  {{:{2}}}  ; {{:{3}}}\n".format(
-                self.prefix, width_account, width_position, width_weight).format
-            for posting, account, position_str, weight_str in zip(entry.postings,
-                                                                  strs_account,
-                                                                  strs_position,
-                                                                  strs_weight):
-                oss.write(fmt(account,
-                              position_str,
-                              weight_str if non_trivial_balance else ''))
+            for posting, account, position, weight in zip(entry.postings,
+                                                          strs_account,
+                                                          strs_position,
+                                                          strs_weight):
+                oss.write(f"{self.prefix}{account:{width_account}}  "
+                          f"{position:{width_position}}  "
+                          f"; {weight:{max(1, width_weight)}}".rstrip() + '\n')
                 if posting.meta:
                     self.write_metadata(posting.meta, oss, '    ')
         else:
-            fmt_str = "{0}{{:{1}}}  {{:{2}}}\n".format(
-                self.prefix, width_account, max(1, width_position))
-            fmt = fmt_str.format
-            for posting, account, position_str in zip(entry.postings,
-                                                      strs_account,
-                                                      strs_position):
-                oss.write(fmt(account, position_str))
+            for posting, account, position in zip(entry.postings,
+                                                  strs_account,
+                                                  strs_position):
+                oss.write(f"{self.prefix}{account:{width_account}}  "
+                          f"{position:{max(1, width_position)}}".rstrip() + '\n')
                 if posting.meta:
                     self.write_metadata(posting.meta, oss, '    ')
 
@@ -233,7 +232,7 @@ class EntryPrinter:
             weight_str: A string, the rendered weight of the posting.
         """
         # Render a string of the flag and the account.
-        flag = '{} '.format(posting.flag) if posting.flag else ''
+        flag = '{} '.format(render_flag(posting.flag)) if posting.flag else ''
         flag_account = flag + posting.account
 
         # Render a string with the amount and cost and optional price, if
@@ -286,7 +285,14 @@ class EntryPrinter:
         self.write_metadata(entry.meta, oss)
 
     def Note(self, entry, oss):
-        oss.write('{e.date} note {e.account} "{e.comment}"\n'.format(e=entry))
+        oss.write('{e.date} note {e.account} "{e.comment}"'.format(e=entry))
+        if entry.tags or entry.links:
+            oss.write(' ')
+            for tag in sorted(entry.tags):
+                oss.write('#{}'.format(tag))
+            for link in sorted(entry.links):
+                oss.write('^{}'.format(link))
+        oss.write('\n')
         self.write_metadata(entry.meta, oss)
 
     def Document(self, entry, oss):
@@ -356,6 +362,15 @@ class EntryPrinter:
         self.write_metadata(entry.meta, oss)
 
 
+def render_flag(inflag: Optional[str]) -> str:
+    """Render a flag, which can be None, a symbol of a character to a string."""
+    if not inflag:
+        return ''
+    if re.match(r"[A-Z]$", inflag):
+        return "'{}".format(inflag)
+    return inflag
+
+
 def format_entry(entry, dcontext=None, render_weights=False, prefix=None):
     """Format an entry into a string in the same input syntax the parser accepts.
 
@@ -378,6 +393,8 @@ def print_entry(entry, dcontext=None, render_weights=False, file=None):
       render_weights: A boolean, true to render the weights for debugging.
       file: An optional file object to write the entries to.
     """
+    # TODO(blais): DO remove this now, it's a huge annoyance not to be able to
+    # print in-between other statements.
     output = file or (codecs.getwriter("utf-8")(sys.stdout.buffer)
                       if hasattr(sys.stdout, 'buffer') else
                       sys.stdout)

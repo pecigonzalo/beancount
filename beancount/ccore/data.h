@@ -1,17 +1,19 @@
+// Basic types and general helper functions.
+//
 // Copyright (C) 2020  Martin Blais
 // License: "GNU GPLv2"
 
-#ifndef _BEANCOUNT_CCORE_DATA_H_
-#define _BEANCOUNT_CCORE_DATA_H_
+#ifndef BEANCOUNT_CCORE_DATA_H_
+#define BEANCOUNT_CCORE_DATA_H_
 
 #include <string>
 
 #include "beancount/ccore/data.pb.h"
 #include "beancount/ccore/number.h"
-#include "beancount/defs.h"
 
 namespace std {
 
+// Define hash functions over dates and costs.
 template<>
 struct hash<beancount::Date> {
   size_t operator()(const beancount::Date& date) const {
@@ -25,9 +27,9 @@ template<>
 struct hash<beancount::Cost> {
   size_t operator()(const beancount::Cost& cost) const {
     return (hash<beancount::Number>{}(cost.number()) ^
-            hash<string>{}(cost.currency()) ^
+            hash<std::string>{}(cost.currency()) ^
             hash<beancount::Date>{}(cost.date()) ^
-            hash<string>{}(cost.label()));
+            hash<std::string>{}(cost.label()));
   }
 };
 
@@ -40,4 +42,4 @@ bool operator==(const Cost& cost1, const Cost& cost2);
 
 }  // namespace beancount
 
-#endif // _BEANCOUNT_CCORE_DATA_H_
+#endif // BEANCOUNT_CCORE_DATA_H_

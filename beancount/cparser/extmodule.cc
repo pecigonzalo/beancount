@@ -1,14 +1,23 @@
 #include "beancount/cparser/parser.h"
-#include "beancount/cparser/scanner.h"
-#include "beancount/cparser/parser.pb.h"
-#include "beancount/parser/tokens.h"
-#include "beancount/defs.h"
+#include "beancount/cparser/ledger.h"
+#include "beancount/ccore/data.pb.h"
+#include "beancount/ccore/datapy.h"
+
+#include <memory>
+#include <string>
+
+#define PY_SSIZE_T_CLEAN
+#include <Python.h>
+#include "datetime.h"
 
 #include "pybind11/pybind11.h"
+#include "pybind11/stl.h"
 
 namespace beancount {
 namespace py = pybind11;
+using std::string;
 using std::cout;
+using std::cerr;
 using std::endl;
 
 // A reference to the placeholder object for missing cost specifications.
@@ -22,9 +31,9 @@ void Lex(const string& filename, int lineno, const string& encoding) {
   cout << "XXX" << filename << " " << lineno << " " << encoding << endl;
 }
 
-void Parse(py::object builder_obj,
-           const string& filename, int lineno, const string& encoding) {
-  parser::ParseFile(builder_obj.ptr(), filename, missing_obj);
+std::unique_ptr<Ledger> Parse(const string& filename, int lineno, const string& encoding) {
+  // TODO(blais): lineno? Encoding?
+  return parser::ParseFile(filename);
 }
 
 // std::unique_ptr<proto::Database> parse_string(const std::string& input_string) {
@@ -40,14 +49,45 @@ void Parse(py::object builder_obj,
 //   return ParseStdin();
 // }
 
-// Shallow read-only interface to protobuf schema.
-void ExportProtos(py::module& mod) {
-  // TODO(blais): Use pybind11_protobuf instead of this:
-  // py::class_<proto::Ref>(mod, "Ref")
-  //   .def(py::init<>())
-  //   .def_property_readonly("type", &proto::Ref::type)
-  //   .def_property_readonly("ident", &proto::Ref::ident)
-  //   .def("__str__", &proto::Ref::DebugString);
+// TODO(blais): Deal with missing oneof for protobufs.
+Directive::BodyCase GetDirectiveType(const Directive& dir) {
+  return dir.body_case();
+}
+
+// Downgrade to V2 conversion for direct proto-to-proto comparison.
+void DowngradeToV2(Directive* dir) {
+  // Remove end line number in directive.
+  dir->mutable_location()->clear_lineno_end();
+
+  // Remove end line number in postings, if this is a transaction.
+  auto body_case = dir->body_case();
+  if (body_case == Directive::BodyCase::kTransaction) {
+    auto* transaction = dir->mutable_transaction();
+    for (auto& posting : *transaction->mutable_postings()) {
+      posting.mutable_location()->clear_lineno_end();
+    }
+  }
+
+  // Remove tags and links for directives that didn't use to support them.
+  if (body_case != Directive::BodyCase::kTransaction &&
+      body_case != Directive::BodyCase::kDocument) {
+    dir->clear_tags();
+    dir->clear_links();
+  }
+
+  // Sort tags.
+  std::vector<string> tags;
+  std::copy(dir->tags().begin(), dir->tags().end(), std::back_inserter(tags));
+  std::sort(tags.begin(), tags.end());
+  dir->clear_tags();
+  for (auto tag : tags) dir->add_tags(tag);
+
+  // Sort links.
+  std::vector<string> links;
+  std::copy(dir->links().begin(), dir->links().end(), std::back_inserter(links));
+  std::sort(links.begin(), links.end());
+  dir->clear_links();
+  for (auto link : links) dir->add_links(link);
 }
 
 }  // namespace beancount
@@ -56,14 +96,13 @@ void ExportProtos(py::module& mod) {
 PYBIND11_MODULE(extmodule, mod) {
   mod.doc() = "Beancount parser extension module (v3).";
 
+  // Lazy initialise the PyDateTime import.
+  if (!PyDateTimeAPI) {
+    PyDateTime_IMPORT;
+  }
+
   using namespace beancount;
   namespace py = pybind11;
-
-  // Initialize the datetime and decimal modules. Note: datetime has to be
-  // initialize in each of the compilation units its APIs get called because of
-  // global declaration in a header file.
-  initialize_datetime();
-  PyDecimal_IMPORT;
 
   // Fetch the MISSING object and steal a reference to a global for later use.
   py::module_ number = py::module_::import("beancount.core.number");
@@ -96,6 +135,10 @@ iterable yielding (token name, string value, sematical value) tuples.
           py::arg("encoding") = "utf8");
 
   // Export the parser entry points.
+  // TODO(blais): Support an interface that's a bit more flexible, like this:
+  // mod.def("parse_string", &parse_string, "Parse a language string");
+  // mod.def("parse_file", &parse_file, "Parse a language file");
+  // mod.def("parse_stdin", &parse_stdin, "Parse an language from stdin");
   mod.def("parse", &Parse, R"(
 Parse input from file object. The filename and lineno keyword
 arguments allow to specify the file name and start line number to be
@@ -105,15 +148,27 @@ object is used, if present. The encoding parameter allows to specify
 the file encoding. Parsing results are retrieved from the Builder
 object specified when the Parser object was instantiated.");
   )",
-          py::arg("builder"),
           py::arg("filename"),
           py::arg("lineno") = 1,
           py::arg("encoding") = "utf8");
 
-  // TODO(blais): Export a 'Parser' type? This is done in the C version.
+  // Expose all the protobuf message types.
+  ExportDataTypesToPython(mod);
 
-  // TODO(blais): Support an interface that's a bit more flexible, like this:
-  // mod.def("parse_string", &parse_string, "Parse a language string");
-  // mod.def("parse_file", &parse_file, "Parse a language file");
-  // mod.def("parse_stdin", &parse_stdin, "Parse an language from stdin");
+  // Define some module-level conveniences.
+  mod.def("GetDirectiveType", &GetDirectiveType);
+  mod.def("DowngradeToV2", &DowngradeToV2);
+
+  // Export the ultimate result of the parser.
+  py::class_<Ledger>(mod, "Ledger")
+    // .def(py::init<>())
+    .def_readonly("directives", &Ledger::directives)
+    .def_readonly("errors", &Ledger::errors)
+    .def_readonly("options", &Ledger::options)
+    .def_readonly("info", &Ledger::info);
+    ;
+
+  // Output the contents of a parsed ledger to a text-formatted file. This will
+  // be used for cross-checking parsed output with that from the Python parser.
+  mod.def("write_to_text", &WriteToText);
 }

@@ -35,14 +35,14 @@
 // Copyright (C) 2020  Martin Blais"
 // GNU GPLv2"
 
-#ifndef _BEANCOUNT_CCORE_INVENTORY_H_
-#define _BEANCOUNT_CCORE_INVENTORY_H_
+#ifndef BEANCOUNT_CCORE_INVENTORY_H_
+#define BEANCOUNT_CCORE_INVENTORY_H_
 
 #include <string>
 #include <utility>
 #include <unordered_map>
 
-#include "beancount/defs.h"
+#include "beancount/ccore/std_utils.h"
 #include "beancount/ccore/data.pb.h"
 #include "beancount/ccore/data.h"
 #include "beancount/ccore/number.h"
@@ -78,13 +78,13 @@ public:
 
 
 private:
-  std::unordered_map<pair<string, Cost>, Number, pair_hash> positions_;
+  std::unordered_map<std::pair<std::string, Cost>, Number, pair_hash> positions_;
 };
 
 // Constructor from a string.
 // TODO(blais): Turn into a proper constructor.
-Inventory InventoryFromString(string_view string);
+Inventory InventoryFromString(std::string_view string);
 
 }  // namespace beancount
 
-#endif // _BEANCOUNT_CCORE_INVENTORY_H_
+#endif // BEANCOUNT_CCORE_INVENTORY_H_

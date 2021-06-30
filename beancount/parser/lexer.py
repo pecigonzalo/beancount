@@ -4,6 +4,7 @@ __copyright__ = "Copyright (C) 2014-2016  Martin Blais"
 __license__ = "GNU GPLv2"
 
 import collections
+import contextlib
 import io
 
 from beancount.core.data import new_metadata
@@ -32,14 +33,13 @@ class LexBuilder:
             LexerError(new_metadata(filename, lineno), str(message), None))
 
 
-def lex_iter(file, builder=None, encoding=None):
+def lex_iter(file, builder=None):
     """An iterator that yields all the tokens in the given file.
 
     Args:
       file: A string, the filename to run the lexer on, or a file object.
       builder: A builder of your choice. If not specified, a LexBuilder is
         used and discarded (along with its errors).
-      encoding: A string (or None), the default encoding to use for strings.
     Yields:
       All the tokens in the input file as ``(token, lineno, text,
       value)`` tuples where ``token`` is a string representing the
@@ -48,15 +48,16 @@ def lex_iter(file, builder=None, encoding=None):
       containing the exact text matched, and ``value`` is the semantic
       value of the token or None.
     """
-    # It would be more appropriate here to check for io.RawIOBase but
-    # that does not work for io.BytesIO despite it implementing the
-    # readinto() method.
-    if not isinstance(file, io.IOBase):
-        file = open(file, 'rb')
-    if builder is None:
-        builder = LexBuilder()
-    parser = _parser.Parser(builder)
-    yield from parser.lex(file, encoding=encoding)
+    with contextlib.ExitStack() as ctx:
+        # It would be more appropriate here to check for io.RawIOBase but
+        # that does not work for io.BytesIO despite it implementing the
+        # readinto() method.
+        if not isinstance(file, io.IOBase):
+            file = ctx.enter_context(open(file, 'rb'))
+        if builder is None:
+            builder = LexBuilder()
+        parser = _parser.Parser(builder)
+        yield from parser.lex(file)
 
 
 def lex_iter_string(string, builder=None, **kwargs):

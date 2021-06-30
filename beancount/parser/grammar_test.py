@@ -195,9 +195,10 @@ class TestParserEntryTypes(unittest.TestCase):
     @parser.parse_doc()
     def test_entry_note(self, entries, _, __):
         """
-          2013-05-18 note Assets:US:BestBank:Checking  "Blah, di blah."
+          2013-05-18 note Assets:US:BestBank  "Blah, di blah."
+          2013-05-18 note Assets:US:BestBank  "Blah." ^984446a67382 #something
         """
-        check_list(self, entries, [data.Note])
+        check_list(self, entries, [data.Note, data.Note])
 
     @parser.parse_doc()
     def test_entry_document(self, entries, _, __):
@@ -1362,6 +1363,15 @@ class TestTotalsAndSigns(unittest.TestCase):
             Assets:Investments:Cash   20000.00 USD
         """
         self.assertRegex(errors[0].message, 'Negative.*allowed')
+
+    @parser.parse_doc(allow_incomplete=True, expect_errors=True)
+    def test_total_price_with_missing(self, entries, errors, _):
+        """
+          2013-05-18 * ""
+            Assets:Investments:MSFT            MSFT @@ 2000.00 USD
+            Assets:Investments:Cash   20000.00 USD
+        """
+        self.assertRegex(errors[0].message, 'Total price on a posting')
 
 
 class TestBalance(unittest.TestCase):

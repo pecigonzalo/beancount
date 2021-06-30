@@ -34,7 +34,7 @@ def get_cflags():
         # See https://bitbucket.org/blais/beancount/issues/173/
         return ["-DYY_NO_UNISTD_H"]
     else:
-        return None
+        return ["-std=gnu99"]
 
 # Read the version.
 with open("beancount/VERSION") as version_file:
@@ -78,9 +78,6 @@ else:
 
 
 install_requires = [
-    # Testing support now uses the pytest module.
-    'pytest',
-
     # This is required to parse dates from command-line options in a
     # loose, accepting format. Note that we use dateutil for timezone
     # database definitions as well, although it is inferior to pytz, but
@@ -97,29 +94,9 @@ install_requires = [
     # The SQL parser uses PLY in order to parse the input syntax.
     'ply',
 
-    # This library is needed to parse XML files (for the OFX examples).
-    'beautifulsoup4',
-
-    # This library is needed to identify the character set of a file for
-    # import, in order to read its contents and match expressions
-    # against it.
-    'chardet',
-
-    # This library is used to download and convert the documentation
-    # programmatically and to upload lists of holdings to a Google
-    # Spreadsheet for live intra-day monitoring.
-    'google-api-python-client',
+    # Command line parsing.
+    'click',
 ]
-
-if sys.platform != 'win32':
-    install_requires += [
-        # This library is needed to identify the type of a file for
-        # import. It uses ctypes to wrap the libmagic library which is
-        # not generally available on Windows nor is easily installed,
-        # thus the conditional dependency.
-        'python-magic',
-    ]
-
 
 # Create a setup.
 # Please read: http://furius.ca/beancount/doc/install about version numbers.
@@ -180,11 +157,7 @@ setup(name="beancount",
               'bean-format = beancount.scripts.format:main',
               'bean-query = beancount.query.shell:main',
               'bean-sql = beancount.scripts.sql:main',
-              'bean-identify = beancount.ingest.scripts_utils:identify_main',
-              'bean-extract = beancount.ingest.scripts_utils:extract_main',
-              'bean-file = beancount.ingest.scripts_utils:file_main',
               'treeify = beancount.tools.treeify:main',
-              'upload-to-sheets = beancount.tools.sheets_upload:main',
           ]
       },
 

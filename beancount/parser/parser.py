@@ -109,6 +109,8 @@ corresponding expected values.
 __copyright__ = "Copyright (C) 2013-2016  Martin Blais"
 __license__ = "GNU GPLv2"
 
+import codecs
+import contextlib
 import functools
 import inspect
 import textwrap
@@ -175,7 +177,7 @@ def is_entry_incomplete(entry):
     return False
 
 
-def parse_file(file, report_filename=None, report_firstline=1, **kw):
+def parse_file(file, report_filename=None, report_firstline=1, encoding=None, **kw):
     """Parse a beancount input file and return Ledger with the list of
     transactions and tree of accounts.
 
@@ -188,25 +190,23 @@ def parse_file(file, report_filename=None, report_firstline=1, **kw):
         list of errors that were encountered during parsing, and
         a dict of the option values that were parsed from the file.)
     """
-    close_file = None
-    if file == '-':
-        close_file = file = sys.stdin.buffer
-    # It would be more appropriate here to check for io.RawIOBase but
-    # that does not work for io.BytesIO despite it implementing the
-    # readinto() method.
-    elif not isinstance(file, io.IOBase):
-        close_file = file = open(file, 'rb')
-
-    builder = grammar.Builder()
-    parser = _parser.Parser(builder)
-    parser.parse(file, filename=report_filename, lineno=report_firstline, **kw)
-
-    if close_file:
-        close_file.close()
+    if encoding is not None and codecs.lookup(encoding).name != 'utf-8':
+        raise ValueError('Only UTF-8 encoded files are supported.')
+    with contextlib.ExitStack() as ctx:
+        if file == '-':
+            file = sys.stdin.buffer
+        # It would be more appropriate here to check for io.RawIOBase but
+        # that does not work for io.BytesIO despite it implementing the
+        # readinto() method.
+        elif not isinstance(file, io.IOBase):
+            file = ctx.enter_context(open(file, 'rb'))
+        builder = grammar.Builder()
+        parser = _parser.Parser(builder)
+        parser.parse(file, filename=report_filename, lineno=report_firstline, **kw)
     return builder.finalize()
 
 
-def parse_string(string, report_filename=None, **kw):
+def parse_string(string, report_filename=None, dedent=False, **kw):
     """Parse a beancount input file and return Ledger with the list of
     transactions and tree of accounts.
 
@@ -215,12 +215,12 @@ def parse_string(string, report_filename=None, **kw):
       report_filename: A string, the source filename from which this string
         has been extracted, if any. This is stored in the metadata of the
         parsed entries.
-      **kw: See parse.c. This function parses out 'dedent' which removes
-        whitespace from the front of the text (default is False).
+      dedent: Whether to run textwrap.dedent() on the string before parsing.
+      **kw: See parse.c.
     Return:
       Same as the output of parse_file().
     """
-    if kw.pop('dedent', None):
+    if dedent:
         string = textwrap.dedent(string)
     if isinstance(string, str):
         string = string.encode('utf8')

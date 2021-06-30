@@ -1402,7 +1402,7 @@ class TestBookAugmentations(_BookingTestBase):
           Assets:Account          1 HOOL {100.00 USD, 2015-10-01}
 
         2015-10-01 * #reduced
-          S Assets:Account        1 HOOL {100.00 USD, 2015-10-01}
+          'S Assets:Account        1 HOOL {100.00 USD, 2015-10-01}
         """
 
     @book_test(Booking.STRICT)
@@ -1415,7 +1415,7 @@ class TestBookAugmentations(_BookingTestBase):
           Assets:Account          -1 HOOL {100.00 USD, 2015-10-01}
 
         2015-10-01 * #reduced
-          S Assets:Account        -1 HOOL {100.00 USD, 2015-10-01}
+          'S Assets:Account        -1 HOOL {100.00 USD, 2015-10-01}
         """
 
     @book_test(Booking.STRICT)
@@ -1446,7 +1446,7 @@ class TestBookAugmentations(_BookingTestBase):
           Assets:Account          1 HOOL {0 USD, 2015-10-01}
 
         2015-10-01 * #reduced
-          S Assets:Account          1 HOOL {USD, 2015-10-01}
+          'S Assets:Account          1 HOOL {USD, 2015-10-01}
         """
         # Further test what would happen if book_reductions() would be called anyhow.
         entry = find_first_with_tag('apply', entries)
@@ -1579,7 +1579,7 @@ class TestBookReductions(_BookingTestBase):
           Assets:Account          -5 HOOL {117.00 USD, 2016-05-02}
 
         2016-05-02 * #reduced
-          S Assets:Account        -5 HOOL {117.00 USD, 2016-05-02}
+          'S Assets:Account        -5 HOOL {117.00 USD, 2016-05-02}
 
         2016-01-01 * #ex
           Assets:Account           1 HOOL {115.00 USD, 2016-01-01}
@@ -1601,7 +1601,7 @@ class TestBookReductions(_BookingTestBase):
           Assets:Account          -5 HOOL {117.00 USD, 2016-05-02}
 
         2016-05-02 * #reduced
-          S Assets:Account        -5 HOOL {117.00 USD, 2016-05-02}
+          'S Assets:Account        -5 HOOL {117.00 USD, 2016-05-02}
 
         2016-01-01 * #ex
           Assets:Account           1 HOOL {115.00 USD, 2016-01-01}
@@ -2081,7 +2081,7 @@ class TestBookAmbiguousFIFO(_BookingTestBase):
           Assets:Account          0 HOOL {}
 
         2015-02-22 * #reduced
-          S Assets:Account          0 HOOL {USD, 2015-02-22}
+          'S Assets:Account          0 HOOL {USD, 2015-02-22}
 
         2015-02-22 * #booked
 
@@ -2238,7 +2238,7 @@ class TestBookAmbiguousLIFO(_BookingTestBase):
           Assets:Account          0 HOOL {}
 
         2015-02-22 * #reduced
-          S Assets:Account          0 HOOL {USD, 2015-02-22}
+          'S Assets:Account          0 HOOL {USD, 2015-02-22}
 
         2015-02-22 * #booked
 
@@ -2378,6 +2378,36 @@ class TestBookAmbiguousLIFO(_BookingTestBase):
 
         2015-02-22 * #booked
           error: "Not enough lots to reduce"
+        """
+
+
+@unittest.skip('Crossing is not supported yet. Handle this in the v3 C++ rewrite. '
+               '{d3cbd78f1029}.')
+class TestBookCrossover(_BookingTestBase):
+    """Test reducing + augmenting in a single leg.
+    This happens in futures when you cross the zero position line.
+    For example, if you're short 1 contract and buy 2 contracts,
+    you need to reduce 1 contract and augment 1 contract in the
+    balance. These result must be two legs."""
+
+    @book_test(Booking.FIFO)
+    def test_ambiguous__FIFO__no_match_against_any_lots(self, _, __):
+        """
+        2015-01-01 * #ante
+          Assets:Account          -1 HOOL {110.00 USD, 2015-10-02}
+
+        2015-02-22 * #apply
+          Assets:Account           2 HOOL {112.00 USD}
+
+        2015-02-22 * #reduced
+          Assets:Account           1 HOOL {110.00 USD, 2015-02-22}
+
+        2015-02-22 * #booked
+          Assets:Account           1 HOOL {110.00 USD, 2015-10-02}
+          Assets:Account           1 HOOL {112.00 USD, 2015-02-22}
+
+        2015-01-01 * #ex
+          Assets:Account           1 HOOL {112.00 USD, 2015-02-22}
         """
 
 
@@ -2733,6 +2763,44 @@ class TestBasicBooking(_BookingTestBase):
           Assets:Account          1 HOOL {100.00 USD, 2015-10-01}
           Assets:Account          2 HOOL {101.00 USD, 2015-10-01}
         """
+
+
+class TestStrictWithSize(_BookingTestBase):
+
+    @book_test(Booking.STRICT_WITH_SIZE)
+    def test_strict_with_size_single(self, _, __):
+        """
+        2015-10-01 * #ante
+          Assets:Account          1 HOOL {101.00 USD}
+          Assets:Account          2 HOOL {102.00 USD}
+
+        2015-10-02 * #apply
+          Assets:Account         -1 HOOL {}
+
+        2015-10-02 * #booked
+          Assets:Account         -1 HOOL {101.00 USD, 2015-10-01}
+
+        2015-11-04 * #ex
+          Assets:Account          2 HOOL {102.00 USD, 2015-10-01}
+        """
+
+    @book_test(Booking.STRICT_WITH_SIZE)
+    def test_strict_with_size_multiple(self, _, __):
+        """
+        2015-10-01 * #ante
+          Assets:Account          2 HOOL {101.00 USD, 2014-06-02}
+          Assets:Account          2 HOOL {102.00 USD, 2014-06-01}
+
+        2015-10-02 * #apply
+          Assets:Account         -2 HOOL {}
+
+        2015-10-02 * #booked
+          Assets:Account         -2 HOOL {102.00 USD, 2014-06-01}
+
+        2015-11-04 * #ex
+          Assets:Account          2 HOOL {101.00 USD, 2014-06-02}
+        """
+
 
 class TestBookingApi(unittest.TestCase):
     def test_book_single(self):

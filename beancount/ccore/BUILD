@@ -9,6 +9,24 @@ package(default_visibility = [
     "//experiments/v3:__subpackages__",
 ])
 
+cc_library(
+    name = "std_utils",
+    hdrs = ["std_utils.h"],
+    srcs = ["std_utils.cc"],
+    deps = [
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "std_utils_test",
+    srcs = ["std_utils_test.cc"],
+    deps = [
+        ":std_utils",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 #----------------------------------------
 
 proto_library(
@@ -24,7 +42,7 @@ cc_proto_library(
 
 py_proto_library(
     name = "number_py_proto",
-    srcs = [":number.proto"],
+    srcs = ["number.proto"],
 )
 
 cc_library(
@@ -34,7 +52,6 @@ cc_library(
     deps = [
         "@com_google_absl//absl/hash",
         "@mpdecimal//:mpdecimal",
-        "//beancount:defs",
         "//beancount/ccore:number_cc_proto",
     ],
 )
@@ -43,8 +60,45 @@ cc_test(
     name = "number_cc_test",
     srcs = ["number_test.cc"],
     deps = [
-        "//beancount:defs",
         ":number",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+#----------------------------------------
+
+proto_library(
+    name = "date_proto",
+    srcs = ["date.proto"],
+)
+
+cc_proto_library(
+    name = "date_cc_proto",
+    deps = [":date_proto"],
+)
+
+py_proto_library(
+    name = "date_py_proto",
+    srcs = ["date.proto"],
+)
+
+cc_library(
+    name = "date",
+    srcs = ["date.cc"],
+    hdrs = ["date.h"],
+    deps = [
+        "@com_google_absl//absl/time",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/status:statusor",
+        "//beancount/ccore:date_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "date_test",
+    srcs = ["date_test.cc"],
+    deps = [
+        ":date",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -56,6 +110,9 @@ proto_library(
     srcs = ["data.proto"],
     deps = [
         "//beancount/ccore:number_proto",
+        "//beancount/ccore:date_proto",
+        "//beancount/cparser:parser_proto",
+        "//beancount/cparser:options_proto",
     ],
 )
 
@@ -71,20 +128,35 @@ py_proto_library(
     srcs = ["data.proto"],
     deps = [
         "//beancount/ccore:number_py_proto",
+        "//beancount/ccore:date_py_proto",
+        "//beancount/cparser:parser_py_proto",
+        "//beancount/cparser:options_py_proto",
     ],
 )
+
 
 cc_library(
     name = "data",
     hdrs = ["data.h"],
     srcs = ["data.cc"],
     deps = [
-        "//beancount:defs",
         ":number",
         ":number_cc_proto",
         ":data_cc_proto",
         #"@com_google_absl//absl/hash",
         "@com_google_protobuf//:protobuf",
+    ],
+)
+
+cc_library(
+    name = "datapy",
+    hdrs = ["datapy.h"],
+    srcs = ["datapy.cc"],
+    deps = [
+        "//beancount/ccore:data_cc_proto",
+        "//beancount/cparser:options_cc_proto",
+        "@local_config_python//:python_headers",
+        "@pybind11",
     ],
 )
 
@@ -95,7 +167,6 @@ cc_library(
     hdrs = ["account.h"],
     srcs = ["account.cc"],
     deps = [
-        "//beancount:defs",
         "//beancount/ccore:data_cc_proto",
         "@com_google_re2//:re2",
         "@com_google_absl//absl/strings:str_format",
@@ -107,7 +178,6 @@ cc_test(
     name = "account_cc_test",
     srcs = ["account_test.cc"],
     deps = [
-        "//beancount:defs",
         ":account",
         "@com_google_googletest//:gtest_main",
     ],
@@ -129,7 +199,6 @@ cc_library(
     hdrs = ["account_types.h"],
     srcs = ["account_types.cc"],
     deps = [
-        "//beancount:defs",
         ":account",
         "@com_google_absl//absl/strings",
     ],
@@ -151,7 +220,7 @@ cc_library(
     hdrs = ["inventory.h"],
     srcs = ["inventory.cc"],
     deps = [
-        "//beancount:defs",
+        ":std_utils",
         ":number",
         ":data",
         ":data_cc_proto",

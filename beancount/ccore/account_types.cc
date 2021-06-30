@@ -9,6 +9,9 @@
 #include "re2/re2.h"
 
 namespace beancount {
+using std::string_view;
+using std::string;
+using std::pair;
 
 // Default values for root accounts.
 const char* kAssets = "Assets";
@@ -78,6 +81,13 @@ bool IsIncomeStatementAccount(string_view account_name, const AccountTypes& acco
 bool IsEquityAccount(string_view account_name, const AccountTypes& account_types) {
   auto atype = GetAccountType(account_name);
   return atype == account_types.equity();
+}
+
+bool IsInvertedAccount(string_view account_name, const AccountTypes& account_types) {
+  auto atype = GetAccountType(account_name);
+  return (atype == account_types.income() ||
+          atype == account_types.liabilities() ||
+          atype == account_types.equity());
 }
 
 int GetAccountSign(string_view account_name, const AccountTypes& account_types) {

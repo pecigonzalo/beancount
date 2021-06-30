@@ -1,14 +1,13 @@
 // Copyright (C) 2020  Martin Blais
 // License: "GNU GPLv2"
 
-#ifndef _BEANCOUNT_CCORE_NUMBER_H_
-#define _BEANCOUNT_CCORE_NUMBER_H_
+#ifndef BEANCOUNT_CCORE_NUMBER_H_
+#define BEANCOUNT_CCORE_NUMBER_H_
 
 #include <string>
 #include <iosfwd>
 
 #include "beancount/ccore/number.pb.h"
-#include "beancount/defs.h"
 
 #include "decimal.hh"
 
@@ -19,17 +18,13 @@ namespace std {
 // Note: This is not provided by the mpdecimal library, but has an
 // implementation in Python's _decimal.c wrappers.
 template<>
-struct hash<beancount::MpDecimal> {
-  size_t operator()(const beancount::MpDecimal& mpd) const {
-    uint64_t h = 0;
-    for (uint64_t datum : mpd.data()) {
-      h ^= hash<uint64_t>{}(datum);
-    }
-    return (hash<int32_t>{}(mpd.flags()) ^
-            hash<int64_t>{}(mpd.exp()) ^
-            hash<int64_t>{}(mpd.digits()) ^
-            hash<int64_t>{}(mpd.len()) ^
-            h);
+struct hash<beancount::MpdTriple> {
+  size_t operator()(const beancount::MpdTriple& tp) const {
+    return (hash<uint32_t>{}(tp.tag()) ^
+            hash<uint32_t>{}(tp.sign()) ^
+            hash<uint64_t>{}(tp.hi()) ^
+            hash<uint64_t>{}(tp.lo()) ^
+            hash<int64_t>{}(tp.exp()));
   }
 };
 
@@ -37,8 +32,8 @@ template<>
 struct hash<beancount::Number> {
   size_t operator()(const beancount::Number& number) const {
     return (number.has_exact() ?
-            hash<string>{}(number.exact()) :
-            hash<beancount::MpDecimal>{}(number.mpd()));
+            hash<std::string>{}(number.exact()) :
+            hash<beancount::MpdTriple>{}(number.triple()));
   }
 };
 
@@ -47,17 +42,22 @@ struct hash<beancount::Number> {
 namespace beancount {
 
 // Deserialize a Number proto to a mpdecimal number.
-decimal::Decimal ProtoToDec(const Number& decproto);
+decimal::Decimal ProtoToDecimal(const Number& proto);
 
 // Serialize a mpdecimal number to a Number proto.
-Number DecToProto(const decimal::Decimal& decproto);
+Number DecimalToProto(const decimal::Decimal& dec, bool use_triple);
+void DecimalToProto(const decimal::Decimal& dec, bool use_triple, Number* proto);
 
 // Comparison operators for decimal protos.
-bool operator==(const Number& number1, const Number& number2);
+bool operator==(const Number& proto1, const Number& proto2);
 
 // Streaming operator for Number proto.
-std::ostream& operator<<(std::ostream& os, const Number& self);
+std::ostream& operator<<(std::ostream& os, const Number& proto);
+
+// Copy `src` to `buffer` stripping commas on the way, for a fixed number of
+// characters.
+void CopySansCommas(const char* src, char* buffer, size_t num_chars);
 
 }  // namespace beancount
 
-#endif // _BEANCOUNT_CCORE_NUMBER_H_
+#endif // BEANCOUNT_CCORE_NUMBER_H_

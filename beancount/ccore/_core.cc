@@ -1,7 +1,6 @@
 #include "beancount/ccore/account.h"
 #include "beancount/ccore/account_types.h"
 #include "beancount/ccore/inventory.h"
-#include "beancount/defs.h"
 
 #include <vector>
 #include <string>
@@ -13,6 +12,10 @@
 
 namespace beancount {
 namespace py = pybind11;
+using std::string;
+using std::string_view;
+using std::vector;
+using std::optional;
 
 namespace {
 
@@ -91,6 +94,7 @@ void ExportAccountTypes(py::module& mod) {
   mod.def("is_balance_sheet_account", &IsBalanceSheetAccount);
   mod.def("is_income_statement_account", &IsIncomeStatementAccount);
   mod.def("is_equity_account", &IsEquityAccount);
+  mod.def("is_inverted_account", &IsInvertedAccount);
   mod.def("get_account_sign", &GetAccountSign);
 }
 

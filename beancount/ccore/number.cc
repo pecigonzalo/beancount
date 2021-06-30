@@ -9,60 +9,74 @@
 namespace beancount {
 using google::protobuf::util::MessageDifferencer;
 
-decimal::Decimal ProtoToDec(const Number& decproto) {
+decimal::Decimal ProtoToDecimal(const Number& proto) {
   decimal::Decimal dec;
-  if (decproto.has_exact()) {
-    dec = decimal::Decimal(decproto.exact());
+  if (proto.has_exact()) {
+    // Use text serialization.
+    dec = decimal::Decimal(proto.exact());
   } else {
-    mpd_t* value = dec.get();
-    const auto& mpd = decproto.mpd();
-    value->flags = mpd.flags() & ~MPD_DATAFLAGS;
-    value->exp = mpd.exp();
-    value->digits = mpd.digits();
-    value->len = mpd.len();
-    value->alloc = mpd.data().size();
-    ///assert(value->data == nullptr);
-    // We have no access
-    value->data = static_cast<mpd_uint_t*>(
-      mpd_alloc(value->alloc, sizeof(*value->data)));
-    for (int ii = 0; ii < value->alloc; ++ii) {
-      value->data[ii] = mpd.data(ii);
-    }
+    // Use triple serialization.
+    const auto& tp = proto.triple();
+    mpd_uint128_triple_t triple;
+    triple.tag = static_cast<mpd_triple_class>(tp.tag());
+    triple.sign = tp.sign();
+    triple.hi = tp.hi();
+    triple.lo = tp.lo();
+    triple.exp = tp.exp();
+    dec = decimal::Decimal(triple);
   }
   return dec;
 }
 
 // Convert a mpdecimal number to a Number proto.
-Number DecToProto(const decimal::Decimal& dec) {
+Number DecimalToProto(const decimal::Decimal& dec, bool use_triple) {
   // Serialize.
-  Number decproto;
-  {
-    auto* mpd = decproto.mutable_mpd();
-    const mpd_t* value = dec.getconst();
-    mpd->set_flags(value->flags & ~MPD_DATAFLAGS);
-    mpd->set_exp(value->exp);
-    mpd->set_digits(value->digits);
-    mpd->set_len(value->len);
-    for (int ii = 0; ii < value->alloc; ++ii) {
-      mpd->add_data(value->data[ii]);
-    }
+  Number proto;
+  DecimalToProto(dec, use_triple, &proto);
+  return proto;
+}
+
+// Convert a mpdecimal number to a Number proto.
+void DecimalToProto(const decimal::Decimal& dec, bool use_triple, Number* proto) {
+  // Serialize.
+  if (use_triple) {
+    // Use triple serialization.
+    mpd_uint128_triple_t triple = dec.as_uint128_triple();
+    auto* tp = proto->mutable_triple();
+    tp->set_tag(triple.tag);
+    tp->set_sign(triple.sign);
+    tp->set_hi(triple.hi);
+    tp->set_lo(triple.lo);
+    tp->set_exp(triple.exp);
+  } else {
+    // Use text serialization.
+    proto->set_exact(dec.to_sci());
   }
-  return decproto;
 }
 
 // TODO(blais): Convert to decimals before comparing.
-bool operator==(const Number& obj1, const Number& obj2) {
-  return MessageDifferencer::Equals(obj1, obj2);
+bool operator==(const Number& proto1, const Number& proto2) {
+  return MessageDifferencer::Equals(proto1, proto2);
 }
 
-std::ostream& operator<<(std::ostream& os, const Number& number) {
-  if (number.has_exact()) {
-    os << number.exact();
+std::ostream& operator<<(std::ostream& os, const Number& proto) {
+  if (proto.has_exact()) {
+    os << proto.exact();
   } else {
-    decimal::Decimal dec = ProtoToDec(number);
+    decimal::Decimal dec = ProtoToDecimal(proto);
     os << dec.to_sci(false);
   }
   return os;
+}
+
+void CopySansCommas(const char* src, char* buffer, size_t num_chars) {
+  char* dst = buffer;
+  for (size_t i = 0; i < num_chars; ++i, ++src) {
+    if (*src == ',')
+      continue;
+    *dst++ = *src;
+  }
+  *dst = '\0';
 }
 
 }  // namespace beancount

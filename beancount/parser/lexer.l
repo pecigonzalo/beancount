@@ -25,14 +25,11 @@
 typedef struct _yyextra_t yyextra_t;
 
 struct _yyextra_t {
-  /* The filename being tokenized. */
-  PyObject* filename;
+    /* The filename being tokenized. */
+    PyObject* filename;
 
-  /* The encoding to use for converting strings. */
-  const char* encoding;
-
-  /* A reference to the beancount.core.number.MISSING object */
-  PyObject* missing_obj;
+    /* A reference to the beancount.core.number.MISSING object */
+    PyObject* missing_obj;
 };
 
 #ifndef YY_TYPEDEF_YY_SCANNER_T
@@ -62,16 +59,14 @@ yyscan_t yylex_free(yyscan_t scanner);
 /**
  * Initialize scanner private data.
  *
- * Setup @scanner to read from the Python file-like object @file. Set
- * the reported file name to @filename, if not NULL and not None.
- * Otherwise try to obtain the file name from the @name attribute of
- * the @file object. If this fails, use the empty string. @encoding is
- * used to decode strings read from the input file, if not NULL,
- * otherwise the default UTF-8 encoding is used. Python objects
- * references are incremented. It is safe to call this multiple times.
+ * Setup @scanner to read from the Python file-like object @file. Set the
+ * reported file name to @filename, if not NULL and not None. Otherwise try to
+ * obtain the file name from the @name attribute of the @file object. If this
+ * fails, use the empty string. Python objects references are incremented. It
+ * is safe to call this multiple times.
  */
 void yylex_initialize(PyObject* file, PyObject* filename, int lineno,
-                      const char* encoding, PyObject* missing_obj, yyscan_t scanner);
+                      PyObject* missing_obj, yyscan_t scanner);
 
 }
 
@@ -129,10 +124,9 @@ UTF-8           {ASCII}|{UTF-8-ONLY}
 ACCOUNTTYPE     ([A-Z]|{UTF-8-ONLY})([A-Za-z0-9\-]|{UTF-8-ONLY})*
 ACCOUNTNAME     ([A-Z0-9]|{UTF-8-ONLY})([A-Za-z0-9\-]|{UTF-8-ONLY})*
 
- /* Characters that may be used as flags. Make sure to include all the
-  * values from beancount.core.flags to allow round-trips between text
-  * and entries. {5307d8fa1e7b} */
-FLAGS           [!&#?%PSTCURM]
+ /* Characters that may be used as flags. Single-character letters may also be
+  * used as flags, but must be prefixed by a quote, as in "'P' for "P". */
+FLAGS           [!&#?%]
 
 %% /* Rules. */
 
@@ -150,6 +144,63 @@ FLAGS           [!&#?%PSTCURM]
 
  /* Comments. */
 ;.* { }
+
+ /* Boolean values. Must be before currencies. */
+TRUE {
+    return TOKEN(BOOL, true);
+}
+
+FALSE {
+    return TOKEN(BOOL, false);
+}
+
+NULL {
+    return TOKEN(NONE);
+}
+
+ /* Currencies.
+  *
+  * A currency (or sometimes called "commodities") is a string which
+  * - Begins with either a letter or a slash (/) character.
+  * - Contains at least one letter.
+  * - Ends with either a letter or a number.
+  * - May contain the following special characters within: period (.),
+  *   underscore (_), dash (-), or quote (').
+  * The pattern has to be kept in sync with beancount.core.amount.CURRENCY_RE.
+  *
+  * In Beancount v3 (C++ version), a single character (e.g. "V" for Visa) is a
+  * valid currency. v2 uses the GNU flex scanner which does not have the
+  * lookahead capability required to make this possible but the v3 C++ scanner
+  * uses Genivia's RE-Flex which supports a lookahead and it will.
+  *
+  * Example currencies:
+  *   "AAPL" (stock)
+  *   "V" (single-character stock)
+  *   "NT.TO" (stock on another market)
+  *   "TLT_040921C144" (equity option)
+  *   "/6J" (currency futures)
+  *   "/NQH21" (commodity futures)
+  *   "/NQH21_QNEG21C13100" (futures option)
+  *
+  * Counter-examples:
+  * - "/6.3": If a currency begins with a slash, the following pattern has to
+  *   include at least one letter. "/6J" is a valid currency, but "/6.3" is not.
+  * - "CAC_": A currency cannot end with a special character; it has to end with
+  *   either an uppercase letter or a number ("C345" is a valid currency, but
+  *   "C_" is not).
+  *
+  * Note: In this scanner we locate the rule above that matching SLASH on
+  * purpose so that a name starting with '/' for a futures contract will match
+  * with higher priority than that matching a divide '/' character.
+  *
+  * Keep in sync with {edefe3fbe907}.
+  */
+[A-Z][A-Z0-9\'\.\_\-]*[A-Z0-9] {
+    return TOKEN(CURRENCY, yytext, yyleng);
+}
+\/[A-Z0-9\'\.\_\-]*[A-Z]([A-Z0-9\'\.\_\-]*[A-Z0-9])? {
+    return TOKEN(CURRENCY, yytext, yyleng);
+}
 
  /* Characters with special meanings. */
 \|		{ return PIPE; }
@@ -174,6 +225,10 @@ FLAGS           [!&#?%PSTCURM]
     yylval->character = yytext[0];
     return FLAG;
 }
+'[A-Z] {
+    yylval->character = yytext[1];
+    return FLAG;
+}
 
  /* Keywords. */
 txn		{ return TXN; }
@@ -196,18 +251,6 @@ option		{ return OPTION; }
 plugin		{ return PLUGIN; }
 include		{ return INCLUDE; }
 
-TRUE {
-    return TOKEN(BOOL, true);
-}
-
-FALSE {
-    return TOKEN(BOOL, false);
-}
-
-NULL {
-    return TOKEN(NONE);
-}
-
  /* Dates. */
 [0-9]{4,}[\-/][0-9]+[\-/][0-9]+ {
     return TOKEN(DATE, yytext);
@@ -218,16 +261,9 @@ NULL {
     return TOKEN(ACCOUNT, yytext);
 }
 
- /* Currencies. These are defined as uppercase only in order to
-  * disambiguate the syntax. This is to be kept in sync with
-  * beancount.core.amount.CURRENCY_RE. */
-[A-Z][A-Z0-9\'\.\_\-]{0,22}[A-Z0-9] {
-    return TOKEN(CURRENCY, yytext, yyleng);
-}
-
  /* String literals. */
 \"([^\\\"]|\\.)*\" {
-    return TOKEN(STRING, yytext + 1, yyleng - 2, yyget_extra(yyscanner)->encoding);
+    return TOKEN(STRING, yytext + 1, yyleng - 2);
 }
 
  /* Numbers. */
@@ -325,7 +361,7 @@ static void yybegin(yyscan_t scanner)
 }
 
 void yylex_initialize(PyObject* file, PyObject* filename, int lineno,
-                      const char* encoding, PyObject* missing_obj, yyscan_t scanner)
+                      PyObject* missing_obj, yyscan_t scanner)
 {
     yyextra_t* extra = yyget_extra(scanner);
 
@@ -345,8 +381,6 @@ void yylex_initialize(PyObject* file, PyObject* filename, int lineno,
 
     Py_XDECREF(extra->filename);
     extra->filename = filename;
-
-    extra->encoding = encoding ? encoding : "utf-8";
 
     extra->missing_obj = missing_obj;
 

@@ -140,6 +140,7 @@ debug:
 
 # Bake a release, upload the source.
 release:
+	python3 setup.py sdist bdist_wheel
 	twine upload dist/*.tar.gz
 
 vtest vtests verbose-test verbose-tests:
@@ -216,7 +217,6 @@ constraints dep-constraints: build/beancount.deps
 # To list all messages, call: "pylint --list-msgs"
 LINT_SRCS =					\
   beancount					\
-  examples/ingest/office/importers		\
   bin/*						\
   tools/*.py
 
