@@ -1,4 +1,4 @@
-"""Insert a balance check for zero before balance sheets accounts are closed.
+"""Insert a balance check for zero before balance sheet accounts are closed.
 
 For balance sheet accounts with a Close directive (Assets, Liabilities &
 Equity), insert Balance directives just after its closing date, for all the
@@ -17,7 +17,8 @@ to:
     2020-02-02 balance Assets:Project:Cash    0 USD
     2020-02-02 balance Assets:Project:Cash    0 CAD
 """
-__copyright__ = "Copyright (C) 2022  Martin Blais"
+
+__copyright__ = "Copyright (C) 2022, 2024-2026  Martin Blais"
 __license__ = "GNU GPLv2"
 
 import collections
@@ -41,7 +42,7 @@ def check_drained(entries, options_map):
 
     Args:
       entries: A list of directives.
-      unused_options_map: An options map.
+      options_map: An options map.
     Returns:
       A list of new errors, if any were found.
     """
